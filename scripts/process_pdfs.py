@@ -1,5 +1,7 @@
 import os
 import sys
+import argparse
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 import PyPDF2
@@ -11,6 +13,14 @@ from pinecone import Pinecone
 
 # Load environment variables
 load_dotenv()
+
+# Load figures configuration
+config_path = Path(__file__).parent.parent / "api" / "figures" / "config.json"
+with open(config_path, 'r', encoding='utf-8') as f:
+    FIGURES_CONFIG = json.load(f)['figures']
+
+# Create dictionary for fast lookup
+FIGURES = {fig['id']: fig for fig in FIGURES_CONFIG}
 
 def extract_pdfs(folder_path):
     """Extract text from all PDFs in folder"""
@@ -34,21 +44,20 @@ def extract_pdfs(folder_path):
                 pdf = PyPDF2.PdfReader(f)
                 text = ""
 
-                # Extract text from all pages
+                # Extract text from all pages and create a Document for each page
                 for page_num, page in enumerate(pdf.pages):
                     page_text = page.extract_text()
-                    text += page_text
-
-                # Create document with metadata
-                doc = Document(
-                    page_content=text,
-                    metadata={
-                        "source": pdf_file,
-                        "total_pages": len(pdf.pages)
-                    }
-                )
-                documents.append(doc)
-                print(f"   OK: Extracted {len(pdf.pages)} pages, {len(text)} characters")
+                    if page_text:
+                        doc = Document(
+                            page_content=page_text,
+                            metadata={
+                                "source": pdf_file,
+                                "page": page_num + 1,  # Page numbers are 1-based
+                                "total_pages": len(pdf.pages)
+                            }
+                        )
+                        documents.append(doc)
+                print(f"   OK: Extracted {len(pdf.pages)} pages from {pdf_file}")
 
         except Exception as e:
             print(f"   ERROR processing {pdf_file}: {str(e)}")
@@ -61,9 +70,10 @@ def chunk_documents(documents):
     print(f"\n>> Chunking documents...")
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=1500,
+        chunk_overlap=300,
         length_function=len,
+        separators=["\n\n", "\n", ". ", " ", ""]
     )
 
     chunks = splitter.split_documents(documents)
@@ -71,70 +81,74 @@ def chunk_documents(documents):
 
     return chunks
 
-def upload_to_pinecone(chunks):
-    """Upload chunks to Pinecone"""
-    print(f"\n>> Uploading to Pinecone...")
+def upload_to_pinecone(chunks, namespace):
+    """Upload chunks to Pinecone with namespace"""
+    print(f"\n>> Uploading to Pinecone in namespace: {namespace}...")
 
-    # Initialize Pinecone
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-
     index_name = os.getenv("PINECONE_INDEX_NAME")
 
-    # Check if index exists
-    index_list = pc.list_indexes()
-    index_names = [idx['name'] for idx in index_list]
-
-    if index_name not in index_names:
+    if index_name not in [idx['name'] for idx in pc.list_indexes()]:
         print(f"ERROR: Index '{index_name}' not found!")
-        print("Please create it in Pinecone dashboard first.")
-        print(f"Available indexes: {index_names}")
         return False
 
-    # Create embeddings
-    print("   Creating embeddings (this may take a while)...")
     embeddings = OpenAIEmbeddings()
 
-    # Upload to Pinecone
     try:
-        vectorstore = PineconeVectorStore.from_documents(
-            chunks,
-            embeddings,
-            index_name=index_name
-        )
-        print(f"   OK: Successfully uploaded {len(chunks)} chunks!")
+        batch_size = 100
+        total_chunks = len(chunks)
+        print(f"   Uploading {total_chunks} chunks in batches of {batch_size}...")
+
+        for i in range(0, total_chunks, batch_size):
+            batch = chunks[i:i + batch_size]
+            print(f"   Uploading batch {i // batch_size + 1}/{(total_chunks + batch_size - 1) // batch_size}...")
+            PineconeVectorStore.from_documents(
+                batch,
+                embeddings,
+                index_name=index_name,
+                namespace=namespace
+            )
+        print(f"   OK: Successfully uploaded all {total_chunks} chunks to namespace '{namespace}'!")
         return True
     except Exception as e:
         print(f"   ERROR uploading: {str(e)}")
         return False
 
 def main():
+    parser = argparse.ArgumentParser(description="Process and upload PDFs for a specific figure.")
+    parser.add_argument("figure_id", help="The ID of the figure to process (e.g., 'lrh', 'marcus-aurelius').")
+    args = parser.parse_args()
+
+    figure_id = args.figure_id
+    if figure_id not in FIGURES:
+        print(f"ERROR: Figure ID '{figure_id}' not found in config.json.")
+        return
+
+    figure_config = FIGURES[figure_id]
+    namespace = figure_config['namespace']
+
     print("=" * 60)
-    print("LRH PDF Processing & Upload Script")
+    print(f"Processing PDFs for: {figure_config['name']}")
     print("=" * 60)
 
-    # Get PDFs folder path
-    pdf_folder = Path(__file__).parent.parent / "pdfs"
+    pdf_folder = Path(__file__).parent.parent / "pdfs" / figure_id
 
     if not pdf_folder.exists():
         print(f"ERROR: PDFs folder not found: {pdf_folder}")
         return
 
-    # Step 1: Extract text from PDFs
     documents = extract_pdfs(pdf_folder)
 
     if not documents:
         print("\nERROR: No documents to process. Exiting.")
         return
 
-    # Step 2: Chunk documents
     chunks = chunk_documents(documents)
-
-    # Step 3: Upload to Pinecone
-    success = upload_to_pinecone(chunks)
+    success = upload_to_pinecone(chunks, namespace)
 
     if success:
         print("\n" + "=" * 60)
-        print("SUCCESS! All PDFs processed and uploaded.")
+        print(f"SUCCESS! All PDFs for {figure_config['name']} processed and uploaded.")
         print("=" * 60)
     else:
         print("\n" + "=" * 60)

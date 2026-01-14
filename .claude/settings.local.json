@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nRemove CORS middleware - not needed for same-origin deployment\n\nRemoved:\n- CORSMiddleware import\n- CORS configuration and middleware setup\n- ALLOWED_ORIGINS environment variable handling\n\nReason:\n- Frontend and backend both hosted on same domain (historical-chat.onrender.com)\n- Same-origin requests don''t need CORS\n- Simplifies deployment and eliminates CORS-related issues\n- Frontend already pointing to correct API URL\n\nImpact:\n- No CORS errors for same-origin requests\n- Cleaner, simpler codebase\n- One less dependency\n- Faster startup time\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(curl -s -X POST https://historical-chat.onrender.com/chat -H \"Content-Type: application/json\" -d '{\"\"question\"\": \"\"Hi\"\", \"\"user_id\"\": \"\"test-user-12345\"\", \"\"figure_id\"\": \"\"marcus-aurelius\"\", \"\"mode\"\": \"\"authentic\"\", \"\"language\"\": \"\"en\"\"}')"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -3,20 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LRH Chatbot</title>
+    <title>Historical Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <h2>LRH Chatbot</h2>
-        </div>
-        <div class="chat-box" id="chat-box"></div>
-        <div class="chat-footer">
-            <input type="text" id="user-input" placeholder="Ask a question...">
-            <button id="send-btn">Send</button>
+    <!-- Login Modal -->
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-modal">
+            <h2>Welcome to Historical Chat</h2>
+            <p class="login-subtitle">Sign in to save your conversations across all devices</p>
+            <button id="google-login-btn" class="google-login-btn">
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+            </button>
+            <p class="login-note">Your conversations will be saved securely to the cloud</p>
         </div>
     </div>
+
+    <!-- Figure Selector Modal -->
+    <div class="figure-selector-overlay" id="figure-selector-overlay">
+        <div class="figure-selector-modal">
+            <h2>Choose a Historical Figure</h2>
+            <p class="figure-selector-subtitle">Select a figure to begin your conversation</p>
+            <div class="figure-cards-container" id="figure-cards-container">
+                <!-- Figure cards will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3>💬 Conversations</h3>
+            <button id="new-chat-btn" class="new-chat-btn">+ New Chat</button>
+            <button id="sidebar-close-btn" class="sidebar-close-btn">✕</button>
+        </div>
+        <div class="conversation-list" id="conversation-list">
+            <!-- Conversations will be added here dynamically -->
+        </div>
+        <div class="sidebar-footer">
+            <div id="user-info" class="user-info" style="display: none;">
+                <span id="user-email"></span>
+                <button id="sign-out-btn">Sign Out</button>
+            </div>
+            <button id="toggle-sidebar-btn" class="toggle-sidebar-btn">◀</button>
+        </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Main Chat Container -->
+    <div class="main-content">
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="header-left">
+                    <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle">☰</button>
+                    <div class="figure-info">
+                        <span class="figure-avatar" id="current-figure-avatar">👨‍💼</span>
+                        <h2 id="current-figure-name">Historical Chat</h2>
+                    </div>
+                    <button id="change-figure-btn" class="change-figure-btn" title="Change Figure">🔄</button>
+                </div>
+                <div class="header-right">
+                    <div class="mode-toggle">
+                        <button id="mode-authentic" class="mode-btn active" data-mode="authentic">Original Words</button>
+                        <button id="mode-paraphrased" class="mode-btn" data-mode="paraphrased">Paraphrased</button>
+                    </div>
+                    <select id="language-selector" class="language-selector">
+                        <option value="en">🇺🇸 English</option>
+                        <option value="af">🇿🇦 Afrikaans</option>
+                        <option value="es">🇪🇸 Español</option>
+                        <option value="fr">🇫🇷 Français</option>
+                        <option value="de">🇩🇪 Deutsch</option>
+                        <option value="pt">🇧🇷 Português</option>
+                        <option value="it">🇮🇹 Italiano</option>
+                        <option value="nl">🇳🇱 Nederlands</option>
+                        <option value="ru">🇷🇺 Русский</option>
+                        <option value="zh">🇨🇳 中文</option>
+                        <option value="ja">🇯🇵 日本語</option>
+                        <option value="ko">🇰🇷 한국어</option>
+                        <option value="ar">🇸🇦 العربية</option>
+                    </select>
+                    <button id="clear-btn" class="clear-btn">🗑️ Clear Chat</button>
+                </div>
+            </div>
+            <div class="chat-box" id="chat-box">
+                <!-- Initial greeting will be added by JavaScript based on language -->
+            </div>
+            <div class="chat-footer">
+                <input type="text" id="user-input" placeholder="Ask a question...">
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
