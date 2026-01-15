@@ -438,21 +438,10 @@ async function selectFigure(figureId) {
         figureSelectorOverlay.style.display = 'none';
     }
 
-    // If switching figures, find or create a conversation for this figure
+    // When switching figures, ALWAYS create a new conversation
+    // Old conversations remain in sidebar and can be accessed by clicking them
     if (previousFigureId !== figureId) {
-        // Look for existing conversations with this figure
-        const existingConv = Object.values(conversations).find(c => c.figureId === figureId);
-
-        if (existingConv) {
-            // Load existing conversation
-            loadConversation(existingConv.id);
-        } else {
-            // Create new conversation for this figure
-            await createNewConversation();
-            const greeting = figure.greeting[currentLanguage] || figure.greeting['en'];
-            chatBox.innerHTML = '';
-            appendMessage('bot', greeting);
-        }
+        await createNewConversation();
     }
 
     // Re-render conversation list to show filtered results
