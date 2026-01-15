@@ -358,13 +358,32 @@ function showFigureSelector() {
     if (!figureCardsContainer) return;
 
     figureCardsContainer.innerHTML = ''; // Clear existing cards
-    availableFigures.forEach(fig => {
+
+    // Filter out hidden figures
+    const visibleFigures = availableFigures.filter(fig => !fig.hidden);
+
+    visibleFigures.forEach(fig => {
         const card = document.createElement('div');
         card.className = 'figure-card';
+        if (!fig.trained) {
+            card.className += ' not-trained';
+        }
         card.style.setProperty('--figure-color', fig.color);
-        card.onclick = () => selectFigure(fig.id);
+
+        // Only allow click if trained
+        if (fig.trained) {
+            card.onclick = () => selectFigure(fig.id);
+        } else {
+            card.style.cursor = 'not-allowed';
+            card.style.opacity = '0.7';
+        }
+
+        const trainedBadge = fig.trained
+            ? ''
+            : '<div class="coming-soon-badge">Coming Soon</div>';
 
         card.innerHTML = `
+            ${trainedBadge}
             <div class="figure-avatar">${fig.avatar}</div>
             <div class="figure-name">${fig.name}</div>
             <div class="figure-role">${fig.role}</div>

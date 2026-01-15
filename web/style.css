@@ -163,6 +163,36 @@ body {
     margin: 0;
 }
 
+/* Coming Soon Badge for untrained figures */
+.coming-soon-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+    z-index: 10;
+}
+
+.figure-card.not-trained {
+    filter: grayscale(30%);
+}
+
+.figure-card.not-trained:hover {
+    transform: none;
+    border-color: #2d3139;
+}
+
+.figure-card.not-trained .figure-avatar {
+    opacity: 0.6;
+}
+
 /* Login Modal */
 .login-overlay {
     position: fixed;
