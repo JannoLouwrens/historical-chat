@@ -272,6 +272,7 @@ let currentMode = 'authentic'; // 'authentic' or 'paraphrased'
 let currentLanguage = 'en'; // Default language: English
 let availableFigures = []; // List of available figures from API
 let currentFigure = null; // Currently selected figure
+let pendingRequestConversationId = null; // Track pending API requests to handle race conditions
 
 // Initialize (called after successful login)
 async function init() {
@@ -432,6 +433,13 @@ async function selectFigure(figureId) {
     const figure = availableFigures.find(f => f.id === figureId);
     if (!figure) return;
 
+    // Warn if there's a pending request
+    if (pendingRequestConversationId) {
+        if (!confirm('A response is still loading. Switch anyway? The response will be saved to the original conversation.')) {
+            return;
+        }
+    }
+
     const previousFigureId = currentFigure?.id;
 
     // IMPORTANT: Save current conversation BEFORE switching figures
@@ -555,6 +563,13 @@ async function saveConversations() {
 }
 
 async function createNewConversation() {
+    // Warn if there's a pending request
+    if (pendingRequestConversationId) {
+        if (!confirm('A response is still loading. Create new chat anyway? The response will be saved to the original conversation.')) {
+            return;
+        }
+    }
+
     const id = generateUUID();
     const conversation = {
         id: id,
@@ -797,6 +812,11 @@ async function sendMessage() {
         return;
     }
 
+    // Capture the conversation ID and figure for this request
+    const requestConversationId = currentConversationId;
+    const requestFigureId = currentFigure.id;
+    pendingRequestConversationId = requestConversationId;
+
     // Add user message
     appendMessage('user', question);
     conversation.messages.push({ sender: 'user', text: question });
@@ -822,34 +842,54 @@ async function sendMessage() {
             body: JSON.stringify({
                 question: question,
                 user_id: currentUser ? currentUser.id : conversation.userId,
-                figure_id: currentFigure?.id || 'lrh',
+                figure_id: requestFigureId,
                 mode: currentMode,
                 language: currentLanguage
             }),
         });
 
         const data = await response.json();
-        loadingDiv.remove();
+        pendingRequestConversationId = null;
 
-        // Add bot response
-        appendMessageWithSources('bot', data.response, data.sources, data.source_count, data.copyright_safe, data.similarity_score);
-        conversation.messages.push({
-            sender: 'bot',
-            text: data.response,
-            sources: data.sources,
-            sourceCount: data.source_count,
-            copyrightSafe: data.copyright_safe,
-            similarityScore: data.similarity_score
-        });
+        // Check if user switched conversations while waiting
+        const stillOnSameConversation = (currentConversationId === requestConversationId);
 
-        // Update conversation
-        conversation.updatedAt = Date.now();
-        await saveConversations();
+        // Remove loading indicator (only if still visible)
+        if (loadingDiv.parentNode) {
+            loadingDiv.remove();
+        }
+
+        // Always save response to the ORIGINAL conversation
+        const originalConversation = conversations[requestConversationId];
+        if (originalConversation) {
+            originalConversation.messages.push({
+                sender: 'bot',
+                text: data.response,
+                sources: data.sources,
+                sourceCount: data.source_count,
+                copyrightSafe: data.copyright_safe,
+                similarityScore: data.similarity_score
+            });
+            originalConversation.updatedAt = Date.now();
+            await saveConversationToSupabase(originalConversation);
+        }
+
+        // Only update DOM if still on the same conversation
+        if (stillOnSameConversation) {
+            appendMessageWithSources('bot', data.response, data.sources, data.source_count, data.copyright_safe, data.similarity_score);
+        }
+
         renderConversationList();
     } catch (error) {
         console.error('Error:', error);
-        loadingDiv.remove();
-        appendMessage('bot', 'Sorry, something went wrong. Please try again.');
+        pendingRequestConversationId = null;
+        if (loadingDiv.parentNode) {
+            loadingDiv.remove();
+        }
+        // Only show error in DOM if still on same conversation
+        if (currentConversationId === requestConversationId) {
+            appendMessage('bot', 'Sorry, something went wrong. Please try again.');
+        }
     }
 }
 
