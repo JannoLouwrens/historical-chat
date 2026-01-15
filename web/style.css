@@ -334,6 +334,40 @@ body {
 
 .sidebar.collapsed {
     transform: translateX(-280px);
+    margin-left: -280px;
+}
+
+/* Expand sidebar button - visible when sidebar is collapsed on desktop */
+.expand-sidebar-btn {
+    position: fixed;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 101;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.expand-sidebar-btn:hover {
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 102, 204, 0.4);
+}
+
+@media (max-width: 768px) {
+    .expand-sidebar-btn {
+        display: none !important;
+    }
 }
 
 .sidebar-header {
@@ -542,7 +576,6 @@ body {
 }
 
 .chat-container {
-    max-width: 1000px;
     width: 100%;
     background: #1a1d24;
     border-radius: 16px;
@@ -552,7 +585,6 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
-    max-height: 900px;
 }
 
 .chat-header {

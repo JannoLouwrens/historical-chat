@@ -271,6 +271,9 @@ let currentFigure = null; // Currently selected figure
 
 // Initialize (called after successful login)
 async function init() {
+    // Create expand sidebar button for desktop
+    createExpandSidebarButton();
+
     // Load figures from API
     await fetchFigures();
 
@@ -412,11 +415,17 @@ function showFigureSelector() {
     }
 }
 
-function selectFigure(figureId) {
+async function selectFigure(figureId) {
     const figure = availableFigures.find(f => f.id === figureId);
     if (!figure) return;
 
     const previousFigureId = currentFigure?.id;
+
+    // IMPORTANT: Save current conversation BEFORE switching figures
+    if (previousFigureId && previousFigureId !== figureId && currentConversationId) {
+        await saveConversations();
+    }
+
     currentFigure = figure;
     localStorage.setItem('historical_chat_figure', figureId);
 
@@ -439,7 +448,7 @@ function selectFigure(figureId) {
             loadConversation(existingConv.id);
         } else {
             // Create new conversation for this figure
-            createNewConversation();
+            await createNewConversation();
             const greeting = figure.greeting[currentLanguage] || figure.greeting['en'];
             chatBox.innerHTML = '';
             appendMessage('bot', greeting);
@@ -577,6 +586,17 @@ function loadConversation(id) {
 
     if (!conversation) return;
 
+    // Switch to conversation's figure if it has one and it's different from current
+    if (conversation.figureId && conversation.figureId !== currentFigure?.id) {
+        const figure = availableFigures.find(f => f.id === conversation.figureId);
+        if (figure) {
+            currentFigure = figure;
+            localStorage.setItem('historical_chat_figure', figure.id);
+            if (currentFigureAvatar) currentFigureAvatar.textContent = figure.avatar;
+            if (currentFigureName) currentFigureName.textContent = figure.name;
+        }
+    }
+
     // Clear chat box
     chatBox.innerHTML = '';
 
@@ -711,7 +731,32 @@ function toggleSidebar() {
         sidebarOverlay.classList.toggle('open');
     } else {
         sidebar.classList.toggle('collapsed');
+        updateExpandButtonVisibility();
     }
+}
+
+// Show/hide expand button based on sidebar state
+function updateExpandButtonVisibility() {
+    const expandBtn = document.getElementById('expand-sidebar-btn');
+    if (expandBtn) {
+        if (sidebar.classList.contains('collapsed')) {
+            expandBtn.style.display = 'flex';
+        } else {
+            expandBtn.style.display = 'none';
+        }
+    }
+}
+
+// Create expand sidebar button (called on init)
+function createExpandSidebarButton() {
+    const expandBtn = document.createElement('button');
+    expandBtn.id = 'expand-sidebar-btn';
+    expandBtn.className = 'expand-sidebar-btn';
+    expandBtn.innerHTML = '☰';
+    expandBtn.title = 'Show conversations';
+    expandBtn.onclick = toggleSidebar;
+    expandBtn.style.display = 'none'; // Hidden by default
+    document.body.appendChild(expandBtn);
 }
 
 // Clear current chat
