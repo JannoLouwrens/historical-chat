@@ -133,7 +133,10 @@ async function saveConversationToSupabase(conversation) {
             user_id: currentUser.id,
             title: conversation.title,
             messages: conversation.messages,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            figure_id: conversation.figureId || null,
+            figure_avatar: conversation.figureAvatar || '💬',
+            figure_name: conversation.figureName || 'Unknown'
         })
         .select();
 
@@ -324,6 +327,18 @@ async function init() {
     modeParaphrasedBtn.addEventListener('click', () => switchMode('paraphrased'));
     languageSelector.addEventListener('change', (e) => changeLanguage(e.target.value));
     changeFigureBtn.addEventListener('click', showFigureSelector);
+
+    // Close button for figure selector
+    const figureSelectorClose = document.getElementById('figure-selector-close');
+    if (figureSelectorClose) {
+        figureSelectorClose.addEventListener('click', hideFigureSelector);
+    }
+}
+
+function hideFigureSelector() {
+    if (figureSelectorOverlay) {
+        figureSelectorOverlay.style.display = 'none';
+    }
 }
 
 // ==================== FIGURE SELECTION ====================
@@ -401,6 +416,7 @@ function selectFigure(figureId) {
     const figure = availableFigures.find(f => f.id === figureId);
     if (!figure) return;
 
+    const previousFigureId = currentFigure?.id;
     currentFigure = figure;
     localStorage.setItem('historical_chat_figure', figureId);
 
@@ -408,16 +424,30 @@ function selectFigure(figureId) {
     if (currentFigureAvatar) currentFigureAvatar.textContent = figure.avatar;
     if (currentFigureName) currentFigureName.textContent = figure.name;
 
-    // Update greeting and clear chat for new figure
-    createNewConversation(); 
-    const greeting = figure.greeting[currentLanguage] || figure.greeting['en'];
-    chatBox.innerHTML = '';
-    appendMessage('bot', greeting);
-
-
+    // Hide the figure selector
     if (figureSelectorOverlay) {
         figureSelectorOverlay.style.display = 'none';
     }
+
+    // If switching figures, find or create a conversation for this figure
+    if (previousFigureId !== figureId) {
+        // Look for existing conversations with this figure
+        const existingConv = Object.values(conversations).find(c => c.figureId === figureId);
+
+        if (existingConv) {
+            // Load existing conversation
+            loadConversation(existingConv.id);
+        } else {
+            // Create new conversation for this figure
+            createNewConversation();
+            const greeting = figure.greeting[currentLanguage] || figure.greeting['en'];
+            chatBox.innerHTML = '';
+            appendMessage('bot', greeting);
+        }
+    }
+
+    // Re-render conversation list to show filtered results
+    renderConversationList();
 }
 
 
@@ -435,7 +465,7 @@ function getGreetingMessage(language) {
 // Language Change Handler
 function changeLanguage(language) {
     currentLanguage = language;
-    localStorage.setItem('lrh_language', language);
+    localStorage.setItem('historical_chat_language', language);
 
     // Update placeholder text based on language
     const placeholders = {
@@ -479,7 +509,7 @@ function switchMode(mode) {
     }
 
     // Save mode preference
-    localStorage.setItem('lrh_mode', mode);
+    localStorage.setItem('historical_chat_mode', mode);
 
     // Reload current conversation to show mode-specific formatting
     if (currentConversationId) {
@@ -498,7 +528,10 @@ async function loadConversations() {
             messages: conv.messages,
             createdAt: new Date(conv.created_at).getTime(),
             updatedAt: new Date(conv.updated_at).getTime(),
-            userId: conv.user_id
+            userId: conv.user_id,
+            figureId: conv.figure_id || null,
+            figureAvatar: conv.figure_avatar || '💬',
+            figureName: conv.figure_name || 'Unknown'
         };
     });
 }
@@ -514,11 +547,14 @@ async function createNewConversation() {
     const id = generateUUID();
     const conversation = {
         id: id,
-        title: 'New Conversation',
+        title: currentFigure ? `Chat with ${currentFigure.name}` : 'New Conversation',
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        userId: currentUser ? currentUser.id : null
+        userId: currentUser ? currentUser.id : null,
+        figureId: currentFigure ? currentFigure.id : null,
+        figureAvatar: currentFigure ? currentFigure.avatar : '💬',
+        figureName: currentFigure ? currentFigure.name : 'Unknown'
     };
 
     conversations[id] = conversation;
@@ -594,11 +630,31 @@ function renderConversationList() {
         conversations[b].updatedAt - conversations[a].updatedAt
     );
 
-    sortedIds.forEach(id => {
+    // Filter to show only current figure's conversations (or all if no figure selected)
+    const filteredIds = currentFigure
+        ? sortedIds.filter(id => conversations[id].figureId === currentFigure.id || !conversations[id].figureId)
+        : sortedIds;
+
+    if (filteredIds.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'conversation-empty';
+        emptyMsg.textContent = 'No conversations yet';
+        conversationList.appendChild(emptyMsg);
+        return;
+    }
+
+    filteredIds.forEach(id => {
         const conv = conversations[id];
         const item = document.createElement('div');
         item.className = 'conversation-item' + (id === currentConversationId ? ' active' : '');
-        item.onclick = () => loadConversation(id);
+        item.onclick = () => loadConversationWithFigure(id);
+
+        const avatar = document.createElement('span');
+        avatar.className = 'conversation-avatar';
+        avatar.textContent = conv.figureAvatar || '💬';
+
+        const titleContainer = document.createElement('div');
+        titleContainer.className = 'conversation-title-container';
 
         const title = document.createElement('div');
         title.className = 'conversation-title';
@@ -608,16 +664,35 @@ function renderConversationList() {
         date.className = 'conversation-date';
         date.textContent = new Date(conv.updatedAt).toLocaleDateString();
 
+        titleContainer.appendChild(title);
+        titleContainer.appendChild(date);
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'conversation-delete';
         deleteBtn.innerHTML = '×';
         deleteBtn.onclick = (e) => deleteConversation(id, e);
 
         item.appendChild(deleteBtn);
-        item.appendChild(title);
-        item.appendChild(date);
+        item.appendChild(avatar);
+        item.appendChild(titleContainer);
         conversationList.appendChild(item);
     });
+}
+
+// Load conversation and switch to its figure if needed
+function loadConversationWithFigure(id) {
+    const conv = conversations[id];
+    if (conv && conv.figureId && conv.figureId !== currentFigure?.id) {
+        // Switch to conversation's figure
+        const figure = availableFigures.find(f => f.id === conv.figureId);
+        if (figure) {
+            currentFigure = figure;
+            localStorage.setItem('historical_chat_figure', figure.id);
+            if (currentFigureAvatar) currentFigureAvatar.textContent = figure.avatar;
+            if (currentFigureName) currentFigureName.textContent = figure.name;
+        }
+    }
+    loadConversation(id);
 }
 
 async function updateConversationTitle(firstMessage) {
@@ -773,9 +848,10 @@ function appendMessageWithSources(sender, message, sources, sourceCount, copyrig
         sourcesContainer.classList.add('sources-container');
 
         // Different header text based on mode
+        const figureName = currentFigure ? currentFigure.name : 'historical';
         const headerText = currentMode === 'paraphrased'
             ? `📚 Citations: ${sourceCount} source${sourceCount > 1 ? 's' : ''}`
-            : `📚 Sources: ${sourceCount} passage${sourceCount > 1 ? 's' : ''} from LRH writings`;
+            : `📚 Sources: ${sourceCount} passage${sourceCount > 1 ? 's' : ''} from ${figureName}'s writings`;
 
         const sourcesHeader = document.createElement('div');
         sourcesHeader.classList.add('sources-header');
