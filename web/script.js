@@ -459,10 +459,20 @@ async function selectFigure(figureId) {
         figureSelectorOverlay.style.display = 'none';
     }
 
-    // When switching figures, ALWAYS create a new conversation
-    // Old conversations remain in sidebar and can be accessed by clicking them
+    // When switching figures, load existing conversation for this figure or create new
     if (previousFigureId !== figureId) {
-        await createNewConversation();
+        // Find existing conversations for this figure, sorted by most recent
+        const existingConvs = Object.values(conversations)
+            .filter(c => c.figureId === figureId)
+            .sort((a, b) => b.updatedAt - a.updatedAt);
+
+        if (existingConvs.length > 0) {
+            // Load the most recent conversation for this figure
+            loadConversation(existingConvs[0].id);
+        } else {
+            // No existing conversation, create a new one
+            await createNewConversation();
+        }
     }
 
     // Re-render conversation list to show filtered results
@@ -663,16 +673,12 @@ function renderConversationList() {
     conversationList.innerHTML = '';
 
     // Sort conversations by updatedAt (most recent first)
+    // Show ALL conversations - user can see chats from all figures
     const sortedIds = Object.keys(conversations).sort((a, b) =>
         conversations[b].updatedAt - conversations[a].updatedAt
     );
 
-    // Filter to show only current figure's conversations (or all if no figure selected)
-    const filteredIds = currentFigure
-        ? sortedIds.filter(id => conversations[id].figureId === currentFigure.id || !conversations[id].figureId)
-        : sortedIds;
-
-    if (filteredIds.length === 0) {
+    if (sortedIds.length === 0) {
         const emptyMsg = document.createElement('div');
         emptyMsg.className = 'conversation-empty';
         emptyMsg.textContent = 'No conversations yet';
@@ -680,7 +686,7 @@ function renderConversationList() {
         return;
     }
 
-    filteredIds.forEach(id => {
+    sortedIds.forEach(id => {
         const conv = conversations[id];
         const item = document.createElement('div');
         item.className = 'conversation-item' + (id === currentConversationId ? ' active' : '');
