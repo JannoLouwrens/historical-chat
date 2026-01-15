@@ -2,6 +2,12 @@
 
 An educational chatbot that lets users converse with historical personas using RAG (Retrieval-Augmented Generation) and vector search.
 
+## Live Demo
+
+**Try it now:** [http://84.8.128.149:8000](http://84.8.128.149:8000)
+
+Chat with Marcus Aurelius, Seneca, Bertrand Russell, and more!
+
 **Author:** Janno Louwrens
 **Created:** 2025
 
