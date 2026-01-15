@@ -263,7 +263,7 @@ const userEmail = document.getElementById('user-email');
 const signOutBtn = document.getElementById('sign-out-btn');
 
 // API Configuration
-const API_URL = 'http://84.8.128.149'; // Oracle VM deployment
+const API_URL = 'http://84.8.128.149:8000'; // Oracle VM deployment
 
 // State
 let currentConversationId = null;
