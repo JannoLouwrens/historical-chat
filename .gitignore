@@ -6,3 +6,8 @@ pdfs/
 *.log
 .DS_Store
 nul
+
+# SSH keys - NEVER commit
+*.key
+*.pem
+ssh-key-*
