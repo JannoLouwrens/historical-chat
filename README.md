@@ -4,7 +4,7 @@ An educational chatbot that lets users converse with historical personas using R
 
 ## Live Demo
 
-**Try it now:** [http://84.8.128.149:8000](http://84.8.128.149:8000)
+**Try it now:** [http://84.8.128.149](http://84.8.128.149)
 
 Chat with Marcus Aurelius, Seneca, Bertrand Russell, and more!
 
