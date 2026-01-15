@@ -183,9 +183,13 @@ async function generateConversationTitle(firstMessage) {
     }
 
     // For very short messages (greetings), generate descriptive title
+    // IMPORTANT: Use the conversation's stored figure name, not currentFigure
+    // This prevents wrong titles when user switches figures quickly
     const lowerMsg = firstMessage.toLowerCase().trim();
     if (lowerMsg.length <= 10 || lowerMsg === 'hi' || lowerMsg === 'hello' || lowerMsg === 'hey') {
-        return `Chat with ${currentFigure ? currentFigure.name : 'Historical Figure'}`;
+        const conversation = conversations[currentConversationId];
+        const figureName = conversation?.figureName || currentFigure?.name || 'Historical Figure';
+        return `Chat with ${figureName}`;
     }
 
     // For short messages (under 35 chars), use them as-is
@@ -280,7 +284,11 @@ async function init() {
     // Load saved figure or show selector
     const savedFigureId = localStorage.getItem('historical_chat_figure');
     if (savedFigureId && availableFigures.find(f => f.id === savedFigureId)) {
-        selectFigure(savedFigureId);
+        // Set figure without creating conversation (we'll load from Supabase)
+        const figure = availableFigures.find(f => f.id === savedFigureId);
+        currentFigure = figure;
+        if (currentFigureAvatar) currentFigureAvatar.textContent = figure.avatar;
+        if (currentFigureName) currentFigureName.textContent = figure.name;
     } else {
         showFigureSelector();
     }
@@ -301,10 +309,15 @@ async function init() {
     // Load conversations from Supabase
     await loadConversations();
 
-    // Create new conversation if none exist
-    if (Object.keys(conversations).length === 0) {
-        createNewConversation();
-    } else {
+    // Create new conversation if none exist for current figure
+    const figureConversations = Object.values(conversations).filter(c => c.figureId === currentFigure?.id);
+    if (figureConversations.length === 0 && currentFigure) {
+        await createNewConversation();
+    } else if (figureConversations.length > 0) {
+        // Load most recent conversation for this figure
+        const sorted = figureConversations.sort((a, b) => b.updatedAt - a.updatedAt);
+        loadConversation(sorted[0].id);
+    } else if (Object.keys(conversations).length > 0) {
         // Load the most recent conversation
         const sortedConvos = Object.keys(conversations).sort((a, b) =>
             conversations[b].updatedAt - conversations[a].updatedAt
