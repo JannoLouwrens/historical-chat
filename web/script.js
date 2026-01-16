@@ -182,44 +182,55 @@ async function generateConversationTitle(firstMessage) {
         return 'New Conversation';
     }
 
+    const conversation = conversations[currentConversationId];
+    const figureName = conversation?.figureName || currentFigure?.name || 'Figure';
+
     // For very short messages (greetings), generate descriptive title
-    // IMPORTANT: Use the conversation's stored figure name, not currentFigure
-    // This prevents wrong titles when user switches figures quickly
     const lowerMsg = firstMessage.toLowerCase().trim();
-    if (lowerMsg.length <= 10 || lowerMsg === 'hi' || lowerMsg === 'hello' || lowerMsg === 'hey') {
-        const conversation = conversations[currentConversationId];
-        const figureName = conversation?.figureName || currentFigure?.name || 'Historical Figure';
+    const greetings = ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good evening', 'howdy'];
+    if (lowerMsg.length <= 10 || greetings.some(g => lowerMsg === g || lowerMsg.startsWith(g + ' '))) {
         return `Chat with ${figureName}`;
     }
 
-    // For short messages (under 35 chars), use them as-is
-    if (firstMessage.length <= 35) {
-        return firstMessage;
-    }
-
-    // Smart extraction: Remove common question starters and filler words
-    let cleaned = firstMessage
-        .replace(/^(what|how|why|when|where|who|can you|could you|would you|should|do you|tell me about|explain|help me with|help me understand|I need help with|I want to know|I'm wondering|I have a question about|can I ask about)\s+/gi, '')
-        .replace(/\?$/g, '')
-        .replace(/^(the|a|an)\s+/gi, '');
+    // Smart extraction: Remove question starters to get the core topic
+    let topic = firstMessage
+        .replace(/^(what is|what are|what's|what do you think about|what are your thoughts on|what would you say about)\s+/gi, '')
+        .replace(/^(how do|how can|how should|how would|how did)\s+/gi, '')
+        .replace(/^(why do|why did|why is|why are|why should)\s+/gi, '')
+        .replace(/^(can you|could you|would you|will you|please)\s+(tell me about|explain|describe|help me understand|talk about)\s+/gi, '')
+        .replace(/^(tell me about|explain|describe|discuss|talk about)\s+/gi, '')
+        .replace(/^(I want to know about|I'm curious about|I'd like to know about|I'm interested in)\s+/gi, '')
+        .replace(/^(your views on|your thoughts on|your opinion on|your perspective on)\s+/gi, '')
+        .replace(/\?+$/g, '')
+        .replace(/^(the|a|an)\s+/gi, '')
+        .trim();
 
     // If we removed too much, use original
-    if (cleaned.length < 10) {
-        cleaned = firstMessage;
+    if (topic.length < 5) {
+        topic = firstMessage.replace(/\?+$/g, '');
     }
 
     // Capitalize first letter
-    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    topic = topic.charAt(0).toUpperCase() + topic.slice(1);
 
-    // Limit to 45 characters for clean titles
-    const title = cleaned.substring(0, 45).trim();
-
-    // Add ellipsis only if we cut off in the middle of a word
-    if (title.length < cleaned.length && !cleaned[title.length]?.match(/\s/)) {
-        return title + '...';
+    // Create title with figure context for clarity
+    let title;
+    if (topic.length <= 30) {
+        title = `${figureName}: ${topic}`;
+    } else {
+        // For longer topics, truncate smartly at word boundary
+        const words = topic.split(' ');
+        let shortened = '';
+        for (const word of words) {
+            if ((shortened + ' ' + word).length <= 35) {
+                shortened = shortened ? shortened + ' ' + word : word;
+            } else break;
+        }
+        title = shortened || topic.substring(0, 35);
+        if (title.length < topic.length) title += '...';
     }
 
-    return title.length < cleaned.length ? title + '...' : title;
+    return title;
 }
 
 // ==================== UUID GENERATOR (Browser Compatibility) ====================
@@ -263,7 +274,7 @@ const userEmail = document.getElementById('user-email');
 const signOutBtn = document.getElementById('sign-out-btn');
 
 // API Configuration
-const API_URL = 'http://84.8.128.149:8000'; // Oracle VM deployment
+const API_URL = '/api'; // Proxied through nginx
 
 // State
 let currentConversationId = null;
@@ -273,6 +284,7 @@ let currentLanguage = 'en'; // Default language: English
 let availableFigures = []; // List of available figures from API
 let currentFigure = null; // Currently selected figure
 let pendingRequestConversationId = null; // Track pending API requests to handle race conditions
+let forceNewChat = false; // Flag to force new conversation when selecting figure
 
 // Initialize (called after successful login)
 async function init() {
@@ -291,7 +303,7 @@ async function init() {
         if (currentFigureAvatar) currentFigureAvatar.textContent = figure.avatar;
         if (currentFigureName) currentFigureName.textContent = figure.name;
     } else {
-        showFigureSelector();
+        await showFigureSelector();
     }
 
     // Load mode preference
@@ -386,7 +398,12 @@ async function fetchFigures() {
     }
 }
 
-function showFigureSelector() {
+async function showFigureSelector() {
+    // Ensure figures are loaded
+    if (availableFigures.length === 0) {
+        await fetchFigures();
+    }
+
     if (!figureCardsContainer) return;
 
     figureCardsContainer.innerHTML = ''; // Clear existing cards
@@ -459,19 +476,57 @@ async function selectFigure(figureId) {
         figureSelectorOverlay.style.display = 'none';
     }
 
-    // When switching figures, load existing conversation for this figure or create new
-    if (previousFigureId !== figureId) {
-        // Find existing conversations for this figure, sorted by most recent
-        const existingConvs = Object.values(conversations)
-            .filter(c => c.figureId === figureId)
-            .sort((a, b) => b.updatedAt - a.updatedAt);
-
-        if (existingConvs.length > 0) {
-            // Load the most recent conversation for this figure
-            loadConversation(existingConvs[0].id);
+    // When switching figures or forcing new chat
+    if (previousFigureId !== figureId || forceNewChat) {
+        if (forceNewChat) {
+            // Force new chat - always create new conversation
+            forceNewChat = false; // Reset flag
+            const id = generateUUID();
+            const newConv = {
+                id: id,
+                title: `Chat with ${figure.name}`,
+                messages: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                userId: currentUser ? currentUser.id : null,
+                figureId: figureId,
+                figureAvatar: figure.avatar,
+                figureName: figure.name
+            };
+            conversations[id] = newConv;
+            currentConversationId = id;
+            await saveConversationToSupabase(newConv);
+            chatBox.innerHTML = '';
+            appendMessage('bot', getGreetingMessage(currentLanguage));
         } else {
-            // No existing conversation, create a new one
-            await createNewConversation();
+            // Normal figure switch - load existing or create new
+            const existingConvs = Object.values(conversations)
+                .filter(c => c.figureId === figureId)
+                .sort((a, b) => b.updatedAt - a.updatedAt);
+
+            if (existingConvs.length > 0) {
+                // Load the most recent conversation for this figure
+                loadConversation(existingConvs[0].id);
+            } else {
+                // No existing conversation, create a new one
+                const id = generateUUID();
+                const newConv = {
+                    id: id,
+                    title: `Chat with ${figure.name}`,
+                    messages: [],
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    userId: currentUser ? currentUser.id : null,
+                    figureId: figureId,
+                    figureAvatar: figure.avatar,
+                    figureName: figure.name
+                };
+                conversations[id] = newConv;
+                currentConversationId = id;
+                await saveConversationToSupabase(newConv);
+                chatBox.innerHTML = '';
+                appendMessage('bot', getGreetingMessage(currentLanguage));
+            }
         }
     }
 
@@ -580,25 +635,9 @@ async function createNewConversation() {
         }
     }
 
-    const id = generateUUID();
-    const conversation = {
-        id: id,
-        title: currentFigure ? `Chat with ${currentFigure.name}` : 'New Conversation',
-        messages: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        userId: currentUser ? currentUser.id : null,
-        figureId: currentFigure ? currentFigure.id : null,
-        figureAvatar: currentFigure ? currentFigure.avatar : '💬',
-        figureName: currentFigure ? currentFigure.name : 'Unknown'
-    };
-
-    conversations[id] = conversation;
-    currentConversationId = id;
-
-    await saveConversations();
-    renderConversationList();
-    loadConversation(id);
+    // Set flag to force new conversation when figure is selected
+    forceNewChat = true;
+    await showFigureSelector();
 
     // Close sidebar on mobile
     if (window.innerWidth <= 768) {
@@ -814,7 +853,7 @@ async function sendMessage() {
     // Ensure a figure is selected
     if (!currentFigure) {
         appendMessage('bot', 'Please select a historical figure to begin the conversation.');
-        showFigureSelector();
+        await showFigureSelector();
         return;
     }
 

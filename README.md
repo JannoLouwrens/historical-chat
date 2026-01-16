@@ -84,7 +84,7 @@ historical-figures-chatbot/
 - **Vector Store**: Pinecone
 - **Memory**: Supabase
 - **Frontend**: Static HTML/JS
-- **Deployment**: Render.com (API), Netlify (Web)
+- **Deployment**: Oracle Cloud (API), Static hosting (Web)
 
 ## Installation
 
